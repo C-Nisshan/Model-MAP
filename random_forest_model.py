@@ -29,7 +29,7 @@ df['Topic'] = df['QuestionText'].apply(
 )
 
 # TF-IDF
-vectorizer = TfidfVectorizer(max_features=2000, stop_words='english')  # more features
+vectorizer = TfidfVectorizer(max_features=2000, stop_words='english')
 X_text = vectorizer.fit_transform(df['StudentExplanation']).toarray()
 
 # Extra features
@@ -51,8 +51,8 @@ X_train, X_val, y_cat_train, y_cat_val, y_mis_train, y_mis_val = train_test_spli
 # ---------------------------
 rf_params = {
     "n_estimators": 400,
-    "max_depth": None,           # grow trees fully
-    "max_features": "sqrt",      # better generalization
+    "max_depth": None,
+    "max_features": "sqrt",
     "min_samples_split": 5,
     "min_samples_leaf": 2,
     "bootstrap": True,
@@ -108,7 +108,7 @@ cat_labels = model_cat.classes_
 mis_labels = model_mis.classes_
 
 # ---------------------------
-# Build ranked top-25 predictions
+# Build ranked top-3 predictions
 # ---------------------------
 final_predictions = []
 
@@ -120,8 +120,8 @@ for i in range(len(test_df)):
             ranked_pairs.append((f"{cat_label}:{mis_label}", score))
 
     ranked_pairs.sort(key=lambda x: x[1], reverse=True)
-    top_25 = [pair[0] for pair in ranked_pairs[:25]]
-    final_predictions.append(" ".join(top_25))
+    top_3 = [pair[0] for pair in ranked_pairs[:3]]
+    final_predictions.append(" ".join(top_3))
 
 # ---------------------------
 # Save Kaggle submission
@@ -132,4 +132,4 @@ submission = pd.DataFrame({
 })
 submission.to_csv('submission.csv', index=False)
 
-print("Here 'submission.csv' saved")
+print("Here 'submission.csv' saved with top 3 predictions per row")
