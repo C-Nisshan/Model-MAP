@@ -18,7 +18,42 @@ def preprocess_text(text):
     return ' '.join(speller(word) for word in text.split())
 
 # ---------------------------
-# Load & preprocess train data
+# Common function for model tuning
+# ---------------------------
+def tune_and_train(X_train, y_train, label_name):
+    print(f"\n🔍 Tuning {label_name} model...")
+    rf_base = RandomForestClassifier(random_state=42, n_jobs=-1)
+    
+    param_dist = {
+        "n_estimators": randint(200, 800),
+        "max_depth": [None] + list(range(10, 101, 10)),
+        "max_features": ["sqrt", "log2", None],
+        "min_samples_split": randint(2, 10),
+        "min_samples_leaf": randint(1, 5),
+        "bootstrap": [True, False],
+        "class_weight": ["balanced", None]
+    }
+    
+    random_search = RandomizedSearchCV(
+        rf_base,
+        param_distributions=param_dist,
+        n_iter=20,
+        scoring='f1_weighted',
+        cv=3,
+        verbose=2,
+        random_state=42,
+        n_jobs=-1
+    )
+    
+    random_search.fit(X_train, y_train)
+    print(f"✅ Best params for {label_name}:", random_search.best_params_)
+    
+    best_model = RandomForestClassifier(**random_search.best_params_, random_state=42, n_jobs=-1)
+    best_model.fit(X_train, y_train)
+    return best_model
+
+# ---------------------------
+# Load & preprocess training data
 # ---------------------------
 df = pd.read_csv('data/train.csv', keep_default_na=False)
 df['StudentExplanation'] = df['StudentExplanation'].apply(preprocess_text)
@@ -50,64 +85,13 @@ X_train, X_val, y_cat_train, y_cat_val, y_mis_train, y_mis_val = train_test_spli
 )
 
 # ---------------------------
-# Define parameter distribution for RandomizedSearchCV
+# Tune and train models
 # ---------------------------
-param_dist = {
-    "n_estimators": randint(200, 800),
-    "max_depth": [None] + list(range(10, 101, 10)),
-    "max_features": ["sqrt", "log2", None],
-    "min_samples_split": randint(2, 10),
-    "min_samples_leaf": randint(1, 5),
-    "bootstrap": [True, False],
-    "class_weight": ["balanced", None]
-}
-
-rf_base = RandomForestClassifier(random_state=42, n_jobs=-1)
+model_cat = tune_and_train(X_train, y_cat_train, "Category")
+model_mis = tune_and_train(X_train, y_mis_train, "Misconception")
 
 # ---------------------------
-# Tune Category model hyperparameters
-# ---------------------------
-random_search_cat = RandomizedSearchCV(
-    rf_base,
-    param_distributions=param_dist,
-    n_iter=20,
-    scoring='f1_weighted',
-    cv=3,
-    verbose=2,
-    random_state=42,
-    n_jobs=-1
-)
-
-random_search_cat.fit(X_train, y_cat_train)
-print("Best params for Category:", random_search_cat.best_params_)
-
-# Train final Category model
-model_cat = RandomForestClassifier(**random_search_cat.best_params_, random_state=42, n_jobs=-1)
-model_cat.fit(X_train, y_cat_train)
-
-# ---------------------------
-# Tune Misconception model hyperparameters
-# ---------------------------
-random_search_mis = RandomizedSearchCV(
-    rf_base,
-    param_distributions=param_dist,
-    n_iter=20,
-    scoring='f1_weighted',
-    cv=3,
-    verbose=2,
-    random_state=42,
-    n_jobs=-1
-)
-
-random_search_mis.fit(X_train, y_mis_train)
-print("Best params for Misconception:", random_search_mis.best_params_)
-
-# Train final Misconception model
-model_mis = RandomForestClassifier(**random_search_mis.best_params_, random_state=42, n_jobs=-1)
-model_mis.fit(X_train, y_mis_train)
-
-# ---------------------------
-# Evaluate on validation set
+# Evaluate
 # ---------------------------
 cat_pred = model_cat.predict(X_val)
 mis_pred = model_mis.predict(X_val)
@@ -117,8 +101,8 @@ cat_f1 = f1_score(y_cat_val, cat_pred, average='weighted')
 mis_acc = accuracy_score(y_mis_val, mis_pred)
 mis_f1 = f1_score(y_mis_val, mis_pred, average='weighted')
 
-print(f"Category - Accuracy: {cat_acc:.4f}, F1: {cat_f1:.4f}")
-print(f"Misconception - Accuracy: {mis_acc:.4f}, F1: {mis_f1:.4f}")
+print(f"\n📊 Category - Accuracy: {cat_acc:.4f}, F1: {cat_f1:.4f}")
+print(f"📊 Misconception - Accuracy: {mis_acc:.4f}, F1: {mis_f1:.4f}")
 
 # ---------------------------
 # Prepare and preprocess test data
@@ -148,10 +132,9 @@ cat_labels = model_cat.classes_
 mis_labels = model_mis.classes_
 
 # ---------------------------
-# Build top-25 ranked predictions for submission
+# Build top-3 ranked predictions
 # ---------------------------
 final_predictions = []
-
 for i in range(len(test_df)):
     ranked_pairs = []
     for cat_idx, cat_label in enumerate(cat_labels):
@@ -159,8 +142,8 @@ for i in range(len(test_df)):
             score = cat_proba[i][cat_idx] * mis_proba[i][mis_idx]
             ranked_pairs.append((f"{cat_label}:{mis_label}", score))
     ranked_pairs.sort(key=lambda x: x[1], reverse=True)
-    top_25 = [pair[0] for pair in ranked_pairs[:25]]
-    final_predictions.append(" ".join(top_25))
+    top_3 = [pair[0] for pair in ranked_pairs[:3]]
+    final_predictions.append(" ".join(top_3))
 
 # ---------------------------
 # Save submission file
@@ -169,6 +152,5 @@ submission = pd.DataFrame({
     'row_id': test_df['row_id'],
     'Category:Misconception': final_predictions
 })
-
 submission.to_csv('submission.csv', index=False)
-print("Kaggle 'submission.csv' saved")
+print("\n💾 Kaggle 'submission.csv' saved")
