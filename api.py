@@ -61,10 +61,10 @@ def prepare_features(df):
 @app.post("/predict")
 def predict(request: PredictRequest):
     df = pd.DataFrame([s.dict() for s in request.samples])
-    X_all = prepare_features(df)
+    x_all = prepare_features(df)
 
     # 1. Predict is_true branch probabilities
-    is_true_preds = is_true_model.predict(X_all)
+    is_true_preds = is_true_model.predict(x_all)
     is_true_class = np.argmax(is_true_preds, axis=1)
 
     # Prepare results
@@ -80,10 +80,10 @@ def predict(request: PredictRequest):
             branch_model = branch_1_model
 
         # Predict category probabilities
-        cat_probs = branch_model.predict(X_all[i])
+        cat_probs = branch_model.predict(x_all[i])
 
         # Predict misconception probabilities
-        mis_probs = misconception_model.predict(X_all[i])
+        mis_probs = misconception_model.predict(x_all[i])
 
         # Get topk category indexes and names
         topk_cat_idx = np.argsort(-cat_probs)[0][:3]
